@@ -1,136 +1,163 @@
-<script>
-import AddonList from "@/components/AddonList.vue";
-import AddonDetails from "@/components/AddonDetails.vue";
-import HeaderBar from "@/components/HeaderBar.vue";
-
-export default {
-  data() {
-    return {
-      addons: {},
-      addon_version_history: {},
-      currentAddon: {},
-      sorting: 'total',
-      filter: ''
-    }
-  },
-  inject: {
-    plausible: {
-      default: undefined
-    }
-  },
-  methods: {
-    loadAddonData() {
-      Promise.all([
-          fetch("/addons.json", {
-            method: "get"
-          }),
-          fetch("/version_history.json", {
-            method: "get"
-          })
-        ]
-      )
-        .then(combinedResponses => {
-          this.onDataLoaded(combinedResponses)
-        })
-        .catch(error => {
-          console.error("Error on retrieving data", error)
-        })
-    },
-    onDataLoaded(combinedResponses) {
-      const addonsJsonPromise = combinedResponses[0].json()
-      const historyJsonPromise = combinedResponses[1].json()
-      Promise.all([
-          addonsJsonPromise.then(json => {
-            for (const addonKey in json) {
-              json[addonKey]['name'] = addonKey;
-            }
-            this.addons = json
-          }),
-          historyJsonPromise.then(historyJson => {
-            this.addon_version_history = historyJson
-          })
-        ]
-      )
-        .then(() => {
-          this.checkForFilterParam()
-          this.addonClicked(Object.keys(this.reactiveAddons)[0])
-        })
-    },
-    addonClicked(addonKey) {
-      this.currentAddon = this.addons[addonKey]
-      if(this.plausible !== undefined) {
-        this.plausible.trackEvent("addon clicked", { props: {addon: addonKey}});
-      }
-    },
-    checkForFilterParam() {
-      let queryString = window.location.search;
-      let urlParams = new URLSearchParams(queryString);
-      if (urlParams.has("filter")) {
-        this.filter = urlParams.get("filter")
-        if(this.plausible !== undefined) {
-          this.plausible.trackEvent("used filter", { props: {filter: this.filter}});
-        }
-      }
-    }
-  },
-  computed: {
-    addonsLoaded() {
-      return this.addons !== undefined && Object.keys(this.addons).length > 0;
-    },
-    addonHistory() {
-      return this.addon_version_history[this.currentAddon.name];
-    },
-    reactiveAddons() {
-      let compareFunction
-      if (this.sorting === 'total') {
-        compareFunction = (one, two) => two.total - one.total;
-      } else if (this.sorting === 'name') {
-        compareFunction = (one, two) => {
-          return (one.name < two.name ? -1 : (one.name > two.name ? 1 : 0));
-        }
-      }
-      let sortedAddonsArray = Object.values(this.addons)
-        .filter(addon => addon.name.includes(this.filter))
-        .sort(compareFunction)
-
-      const sortedAddons = {}
-      for (const addon of sortedAddonsArray) {
-        sortedAddons[addon.name] = addon;
-      }
-      return sortedAddons;
-    }
-  },
-  components: {
-    HeaderBar,
-    AddonList,
-    AddonDetails,
-  },
-  mounted() {
-    this.loadAddonData()
-  }
+<script setup>
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { Activity, ArrowDownToLine, ArrowRight, ArrowUpRight, AudioLines, Bike, BookOpen, Boxes, Camera, Check, ChevronDown, ChevronRight, CircleHelp, Code2, Copy, Database, ExternalLink, FolderGit2, GitBranch, Code2 as Github, Globe2, HardDrive, House, Info, Layers, LayoutDashboard, Link2, LoaderCircle, Map, Menu, Moon, Package, Search, ShieldCheck, Sparkles, Sun, TrendingUp, Users, X } from '@lucide/vue'
+import StatChart from './components/StatChart.vue'
+import { projects, repository, pageUrl, projectMatches } from './catalog.js'
+import { number, percentage, percent, normalize, filterEntries, sortedVersions, historyPoints, growth, buildLink, csv, dailySeries } from './statistics.js'
+import { palette } from './palette.js'
+const baseUrl = import.meta.env.BASE_URL
+const params = new URLSearchParams(location.search)
+const kind = ref(params.get('tab') === 'integrations' ? 'integrations' : 'apps')
+const view = ref(params.get('view') === 'projects' ? 'projects' : 'overview')
+const query = ref(params.get('filter') || ''), store = ref(params.get('store') || '')
+const projectId = ref(params.get('project') || ''), selectedId = ref(params.get('item') || '')
+const days = ref([30, 90, 365].includes(Number(params.get('days'))) ? Number(params.get('days')) : 90)
+const sort = ref('total'), limit = ref(60), mobileMenu = ref(false), loading = ref(true), toast = ref('')
+const datasets = ref({ apps: [], integrations: [] }), errors = ref({}), history = ref({}), metadata = ref({}), historyUnavailable = ref(false)
+const sourcesDialog = ref(null), shareDialog = ref(null)
+const icons = { git: GitBranch, drive: HardDrive, camera: Camera, bike: Bike, audio: AudioLines, map: Map }
+let timer, storedTheme = 'light'
+try { storedTheme = localStorage.getItem('observatory-theme') || 'light' } catch { /* optional preference */ }
+const theme = ref(storedTheme)
+watch(theme, value => { document.documentElement.dataset.theme = value; try { localStorage.setItem('observatory-theme', value) } catch { /* optional preference */ } }, { immediate: true })
+const entries = computed(() => datasets.value[kind.value])
+const activeProject = computed(() => projects.find(p => p.id === projectId.value && p.kind === kind.value))
+const filtered = computed(() => {
+  let list = filterEntries(entries.value, { query: query.value, store: kind.value === 'apps' ? store.value : '' })
+  if (activeProject.value) list = list.filter(e => projectMatches(e, activeProject.value))
+  return [...list].sort(sort.value === 'name' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => b.total - a.total || a.name.localeCompare(b.name))
+})
+const selected = computed(() => filtered.value.find(e => e.id === selectedId.value) || null)
+const total = computed(() => filtered.value.reduce((sum, e) => sum + e.total, 0))
+const autoUpdates = computed(() => filtered.value.reduce((sum, e) => sum + (e.auto_update || 0), 0))
+const protectedCount = computed(() => filtered.value.reduce((sum, e) => sum + (e.protected || 0), 0))
+const versionCount = computed(() => filtered.value.reduce((sum, e) => sum + Object.keys(e.versions).length, 0))
+const stores = computed(() => {
+  const totals = new Map()
+  for (const entry of datasets.value.apps) totals.set(entry.store, (totals.get(entry.store) || 0) + entry.total)
+  return [...new Set(['core', 'a0d7b954', '4c7fee11', '68413af6', ...[...totals].sort((a, b) => b[1] - a[1]).slice(0, 16).map(([id]) => id), store.value].filter(Boolean))]
+})
+const versions = computed(() => sortedVersions(selected.value))
+const versionSum = computed(() => versions.value.reduce((sum, [, count]) => sum + count, 0))
+const versionSlices = computed(() => {
+  const values = versions.value.slice(0, 5).map(([label, value]) => ({ label, value }))
+  const other = versions.value.slice(5).reduce((sum, [, count]) => sum + count, 0)
+  if (other) values.push({ label: 'Weitere Versionen', value: other })
+  return values
+})
+const versionData = computed(() => ({ labels: versionSlices.value.map(v => v.label), datasets: [{ data: versionSlices.value.map(v => v.value), backgroundColor: palette, borderWidth: 3, borderColor: theme.value === 'dark' ? '#17253a' : '#ffffff', hoverOffset: 5 }] }))
+const donutOptions = computed(() => ({ cutout: '77%' }))
+const points = computed(() => historyPoints(history.value, kind.value, selected.value?.id, days.value))
+const change = computed(() => growth(points.value))
+const timeline = computed(() => dailySeries(points.value))
+const lineData = computed(() => ({ labels: timeline.value.map(([date]) => new Date(`${date}T12:00:00Z`).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })), datasets: [{ label: 'Gemeldete Installationen', data: timeline.value.map(([, n]) => n), borderColor: '#4e87d5', backgroundColor: '#4e87d51a', fill: true, borderWidth: 2.5, tension: 0.22, pointRadius: points.value.length > 60 ? 0 : 3, pointHoverRadius: 5, spanGaps: false }] }))
+const lineOptions = computed(() => ({ scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 6, maxRotation: 0, color: '#7b899d' }, border: { display: false } }, y: { beginAtZero: true, ticks: { maxTicksLimit: 5, color: '#7b899d', precision: 0 }, grid: { color: theme.value === 'dark' ? '#26374c' : '#edf1f5' }, border: { display: false } } } }))
+const collected = computed(() => metadata.value.sources?.[kind.value]?.fetchedAt || metadata.value.collectedAt)
+const dataDate = computed(() => collected.value ? new Date(collected.value).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : 'Zeitpunkt unbekannt')
+const stale = computed(() => collected.value && Date.now() - Date.parse(collected.value) > 48 * 3600000)
+const shareUrl = computed(() => buildLink({ kind: kind.value, filter: query.value, store: store.value, item: selectedId.value, project: projectId.value, view: view.value === 'projects' ? 'projects' : '', days: days.value }, location.href))
+const embedMarkdown = computed(() => selected.value ? `[Statistiken für ${selected.value.name}](${shareUrl.value})` : `[Home Assistant Statistiken](${shareUrl.value})`)
+const scopeLabel = computed(() => activeProject.value?.name || (query.value || store.value ? 'Gefilterte Auswahl' : 'Gesamtes Ökosystem'))
+function notify(message) { toast.value = message; clearTimeout(timer); timer = setTimeout(() => { toast.value = '' }, 3500) }
+async function copy(text) { try { await navigator.clipboard.writeText(text); notify('In die Zwischenablage kopiert') } catch { notify('Kopieren nicht möglich. Bitte markiere den Text im Dialog.'); if (!shareDialog.value.open) shareDialog.value.showModal() } }
+function switchKind(value) { if (kind.value === value) return; kind.value = value; query.value = ''; store.value = ''; selectedId.value = ''; projectId.value = ''; limit.value = 60 }
+function navigate(value) { view.value = value; mobileMenu.value = false }
+function resetFilters() { query.value = ''; store.value = ''; projectId.value = ''; selectedId.value = '' }
+function openProject(project) { kind.value = project.kind; query.value = ''; store.value = ''; projectId.value = project.id; selectedId.value = ''; view.value = 'overview'; window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function projectEntry(project) { return datasets.value[project.kind].find(e => projectMatches(e, project)) }
+function projectLink(project) { return buildLink({ kind: project.kind, project: project.id }, pageUrl) }
+function badgeMarkdown(project) { return `[![Home Assistant Installationen](${pageUrl}badges/${project.id}.svg)](${projectLink(project)})` }
+function exportCsv() {
+  const url = URL.createObjectURL(new Blob([csv(filtered.value, kind.value)], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a'); a.href = url; a.download = `ha-observatory-${kind.value}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+  notify(`${number(filtered.value.length)} Einträge exportiert`)
 }
+async function readJson(path) { const response = await fetch(`${import.meta.env.BASE_URL}${path}`, { cache: 'no-cache' }); if (!response.ok) throw new Error(`${response.status} ${path}`); return response.json() }
+async function load() {
+  loading.value = true; errors.value = {}
+  const results = await Promise.allSettled(['data/apps.json', 'data/custom_integrations.json', 'data/metadata.json'].map(readJson))
+  for (const [index, key] of ['apps', 'integrations'].entries()) {
+    const result = results[index]
+    if (result.status === 'fulfilled' && result.value && !Array.isArray(result.value) && typeof result.value === 'object' && normalize(result.value).length) datasets.value[key] = normalize(result.value)
+    else { datasets.value[key] = []; errors.value[key] = 'Die Statistikdaten konnten nicht geladen werden. Bitte versuche es erneut.' }
+  }
+  metadata.value = results[2].status === 'fulfilled' ? results[2].value : {}
+  loading.value = false
+}
+watch([filtered, loading], () => { if (!loading.value && !filtered.value.some(e => e.id === selectedId.value)) selectedId.value = filtered.value[0]?.id || '' }, { immediate: true })
+watch([kind, selectedId, loading], async ([type, id, busy]) => {
+  if (!id || busy) return
+  historyUnavailable.value = false
+  try {
+    const values = await readJson(`data/history/${type}/entry-${encodeURIComponent(id)}.json`)
+    if (kind.value !== type || selectedId.value !== id) return
+    history.value = { ...history.value, [type]: { ...history.value[type], [id]: values } }
+  } catch { if (kind.value === type && selectedId.value === id) historyUnavailable.value = true }
+})
+watch([kind, query, store, projectId], () => { limit.value = 60 })
+watch([kind, query, store, selectedId, projectId, days, view], () => { if (!loading.value) window.history.replaceState({}, '', shareUrl.value) })
+function onPopState() {
+  const p = new URLSearchParams(location.search)
+  kind.value = p.get('tab') === 'integrations' ? 'integrations' : 'apps'; query.value = p.get('filter') || ''; store.value = p.get('store') || ''; projectId.value = p.get('project') || ''; selectedId.value = p.get('item') || ''; view.value = p.get('view') === 'projects' ? 'projects' : 'overview'; days.value = [30, 90, 365].includes(Number(p.get('days'))) ? Number(p.get('days')) : 90
+}
+function tabKey(event) { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); switchKind(event.key === 'Home' ? 'apps' : event.key === 'End' ? 'integrations' : kind.value === 'apps' ? 'integrations' : 'apps'); nextTick(() => document.getElementById(`tab-${kind.value}`)?.focus()) } }
+onMounted(() => { load(); window.addEventListener('popstate', onPopState) })
+onBeforeUnmount(() => { clearTimeout(timer); window.removeEventListener('popstate', onPopState) })
 </script>
 
 <template>
-  <HeaderBar/>
-  <div class="container">
-    <div class="row" v-if="addonsLoaded">
-      <div class="col-4">
-        <AddonList :addon-data="this.reactiveAddons"
-                   :current-addon="this.currentAddon"
-                   :current-filter="this.filter"
-                   @addon-clicked="(addon) => addonClicked(addon)"
-                   @change-sorting="(newSorting) => this.sorting = newSorting"
-                   @filter-changed="(newFilter) => this.filter = newFilter"/>
-      </div>
-      <div class="col-8">
-        <AddonDetails :addon-details="this.currentAddon" :addon-history="this.addonHistory" />
-      </div>
-    </div>
-    <div class="text-center" v-if="!addonsLoaded">
-      <div class="spinner-border text-primary d-inline-block" role="status">
-        <span class="visually-hidden">Loading...</span>
-      </div>
-    </div>
-  </div>
+<a class="skip-link" href="#main-content">Zum Inhalt springen</a>
+<div v-if="mobileMenu" class="sidebar-backdrop" @click="mobileMenu = false"></div>
+<aside class="sidebar" :class="{ open: mobileMenu }" aria-label="Hauptnavigation">
+  <a class="brand" href="?" @click.prevent="navigate('overview'); resetFilters()"><img :src="`${baseUrl}favicon.svg`" alt="" width="42" height="42" /><span>HA <b>Observatory</b><small>HOME ASSISTANT ANALYTICS</small></span></a>
+  <div class="workspace-label">WORKSPACE <span>2026</span></div>
+  <nav><button :class="{ active: view === 'overview' }" @click="navigate('overview')"><LayoutDashboard :size="18" /> Überblick <ChevronRight class="nav-arrow" :size="15" /></button><button :class="{ active: view === 'projects' }" @click="navigate('projects')"><FolderGit2 :size="18" /> Meine Projekte <span class="nav-count">6</span></button><button @click="sourcesDialog.showModal(); mobileMenu = false"><Database :size="18" /> Daten & Methodik <ArrowUpRight class="nav-arrow" :size="15" /></button></nav>
+  <div class="sidebar-divider"></div><div class="sidebar-section-title">ENTDECKEN</div>
+  <a class="side-link" href="https://analytics.home-assistant.io/" target="_blank" rel="noreferrer"><Globe2 :size="17" /> Offizielle Analytics <ArrowUpRight :size="14" /></a><a class="side-link" :href="repository" target="_blank" rel="noreferrer"><Github :size="17" /> Auf GitHub <ArrowUpRight :size="14" /></a>
+  <div class="community-note"><div class="community-icon"><Sparkles :size="18" /></div><strong>Von der Community.<br />Für die Community.</strong><p>Offene Daten machen sichtbar, was wir gemeinsam bewegen.</p><a :href="repository" target="_blank" rel="noreferrer">Projekt entdecken <ArrowUpRight :size="14" /></a></div>
+  <div class="sidebar-bottom"><div class="avatar">s.</div><div><strong>seb5594</strong><small>Open-source enthusiast</small></div><button class="theme-button" :aria-label="theme === 'dark' ? 'Helles Design' : 'Dunkles Design'" @click="theme = theme === 'dark' ? 'light' : 'dark'"><Sun v-if="theme === 'dark'" :size="17" /><Moon v-else :size="17" /></button></div>
+</aside>
+<div class="page-shell">
+<header class="topbar"><div class="breadcrumbs"><button class="mobile-toggle icon-button" aria-label="Navigation öffnen" @click="mobileMenu = !mobileMenu"><Menu :size="21" /></button><House :size="15" /><ChevronRight :size="13" /><span>Observatory</span><ChevronRight :size="13" /><strong>{{ view === 'projects' ? 'Meine Projekte' : 'Überblick' }}</strong></div><div class="topbar-right"><span class="open-data"><span></span> Offene Daten</span><a :href="repository" aria-label="Quellcode auf GitHub" target="_blank" rel="noreferrer"><Github :size="19" /></a></div></header>
+<main id="main-content">
+<section class="page-heading"><div><div class="eyebrow"><span></span> EIN BLICK AUF UNSER ÖKOSYSTEM</div><h1>{{ view === 'projects' ? 'Deine Projekte. In Zahlen.' : 'Home Assistant. In Zahlen.' }}</h1><p>{{ view === 'projects' ? 'Ein Zuhause für deine Open-Source-Projekte. Mit Statistiken zum Teilen.' : 'Entdecke, was die Community nutzt. Verstehe, wie deine Projekte ankommen.' }}</p></div><div v-if="view === 'overview'" class="heading-actions"><button class="button" :disabled="loading || !filtered.length" @click="exportCsv"><ArrowDownToLine :size="16" /> CSV exportieren</button><button class="button primary" @click="shareDialog.showModal()"><Link2 :size="16" /> Ansicht teilen</button></div></section>
+<template v-if="view === 'overview'">
+<div class="tabs-row"><div class="tabs" role="tablist" aria-label="Statistiktyp" @keydown="tabKey"><button id="tab-apps" role="tab" :aria-selected="kind === 'apps'" :tabindex="kind === 'apps' ? 0 : -1" aria-controls="statistics-panel" :class="{ selected: kind === 'apps' }" @click="switchKind('apps')"><Package :size="17" /> Apps & Add-ons <span>{{ number(datasets.apps.length) }}</span></button><button id="tab-integrations" role="tab" :aria-selected="kind === 'integrations'" :tabindex="kind === 'integrations' ? 0 : -1" aria-controls="statistics-panel" :class="{ selected: kind === 'integrations' }" @click="switchKind('integrations')"><Boxes :size="17" /> Custom Integrations <span>{{ number(datasets.integrations.length) }}</span></button></div><span class="updated"><span class="status-dot" :class="{ stale }"></span>{{ loading ? 'Daten werden geladen' : `Abruf: ${dataDate}` }}</span></div>
+<section id="statistics-panel" role="tabpanel" :aria-labelledby="`tab-${kind}`" :aria-busy="loading">
+<div v-if="loading" class="loading-state"><LoaderCircle class="spin" :size="30" /><h2>Ein Moment für die Zahlen.</h2><p>Die offiziellen Analytics-Daten werden geladen.</p></div>
+<div v-else-if="errors[kind]" class="empty-state panel"><Database :size="32" /><h2>Daten gerade nicht erreichbar</h2><p>{{ errors[kind] }}</p><button class="button primary" @click="load">Erneut versuchen</button></div>
+<template v-else>
+<div v-if="stale" class="notice"><Info :size="16" /> Der letzte Datenabruf liegt mehr als 48 Stunden zurück. Die angezeigten Zahlen können veraltet sein.</div>
+<div class="scope-line"><span>{{ scopeLabel }}</span><button v-if="query || store || projectId" @click="resetFilters">Filter zurücksetzen <X :size="12" /></button><span class="scope-note">Freiwillig gemeldete Nutzungsdaten <button class="inline-icon" aria-label="Was bedeuten diese Zahlen?" @click="sourcesDialog.showModal()"><CircleHelp :size="14" /></button></span></div>
+<div class="metrics">
+<article class="metric"><div class="metric-label">Gemeldete Installationen <span class="metric-icon blue"><Users :size="17" /></span></div><strong>{{ filtered.length ? number(total) : '—' }}</strong><div class="metric-foot"><span class="small-dot blue"></span> Summe über {{ number(filtered.length) }} Projekte</div></article>
+<article class="metric"><div class="metric-label">{{ kind === 'apps' ? 'Apps & Add-ons' : 'Custom Integrations' }} <span class="metric-icon teal"><Package v-if="kind === 'apps'" :size="17" /><Boxes v-else :size="17" /></span></div><strong>{{ number(filtered.length) }}</strong><div class="metric-foot">{{ query || store || projectId ? 'In deiner aktuellen Auswahl' : 'Im offiziellen Datensatz erfasst' }}</div></article>
+<article class="metric"><div class="metric-label">{{ kind === 'apps' ? 'Automatische Updates' : 'Gemeldete Versionen' }} <span class="metric-icon violet"><Activity :size="17" /></span></div><strong>{{ !filtered.length ? '—' : kind === 'apps' ? percentage(autoUpdates, total) : number(versionCount) }}</strong><div class="metric-foot">{{ kind === 'apps' ? `${number(autoUpdates)} Installationen mit Auto-Update` : 'Versionseinträge über alle Projekte' }}</div></article>
+<article class="metric"><div class="metric-label">{{ kind === 'apps' ? 'Geschützter Modus' : 'Erfasste Tage' }} <span class="metric-icon amber"><ShieldCheck v-if="kind === 'apps'" :size="17" /><Layers v-else :size="17" /></span></div><strong>{{ kind === 'apps' ? (filtered.length ? percentage(protectedCount, total) : '—') : number(metadata.historyDays || 0) }}</strong><div class="metric-foot">{{ kind === 'apps' ? `${number(protectedCount)} geschützte Installationen` : 'Eigener Verlauf seit dem ersten Abruf' }}</div></article>
+</div>
+<div class="dashboard-grid">
+<section class="explorer panel" aria-labelledby="explorer-title"><div class="panel-heading"><h2 id="explorer-title">{{ kind === 'apps' ? 'Apps entdecken' : 'Integrationen entdecken' }}</h2><span class="count-label">{{ number(filtered.length) }}</span></div><div class="explorer-controls"><label class="search-field"><Search :size="17" /><input v-model="query" type="search" :placeholder="kind === 'apps' ? 'Name oder Slug suchen …' : 'Name oder Domain suchen …'" aria-label="Projekte durchsuchen" /></label><div class="filter-row"><label v-if="kind === 'apps'" class="select-wrap"><select v-model="store" aria-label="App-Store filtern"><option value="">Alle App-Stores</option><option v-for="s in stores" :key="s" :value="s">{{ s === 'core' ? 'Offizielle Apps' : s === 'a0d7b954' ? 'Community Apps' : s === '4c7fee11' ? 'seb5594' : s === '68413af6' ? 'Poeschl' : s }}</option></select><ChevronDown :size="13" /></label><label class="select-wrap"><select v-model="sort" aria-label="Sortierung"><option value="total">Meistgenutzt</option><option value="name">Name A–Z</option></select><ChevronDown :size="13" /></label></div></div><div class="list-column-labels"><span>PROJEKT</span><span>INSTALLATIONEN</span></div><div class="project-list"><button v-for="(entry, index) in filtered.slice(0, limit)" :key="entry.id" class="project-row" :class="{ active: selectedId === entry.id }" :aria-pressed="selectedId === entry.id" @click="selectedId = entry.id"><span class="app-glyph" :class="['blue', 'teal', 'violet', 'amber'][index % 4]"><Package v-if="kind === 'apps'" :size="19" /><Boxes v-else :size="19" /></span><span class="project-name"><strong>{{ entry.name }}</strong><small>{{ entry.id }}</small></span><span class="project-value">{{ number(entry.total) }}<ChevronRight :size="13" /></span></button><div v-if="!filtered.length" class="list-empty"><Search :size="25" /><strong>{{ activeProject ? 'Noch nicht gemeldet' : 'Keine Treffer' }}</strong><p>{{ activeProject ? 'Für dieses Projekt liegt noch kein Eintrag vor. Das bedeutet nicht, dass es keine Installationen gibt.' : 'Versuche einen anderen Namen, Slug oder Store.' }}</p><button class="text-button" @click="resetFilters">Alle Projekte anzeigen <ArrowRight :size="14" /></button></div><button v-if="filtered.length > limit" class="load-more" @click="limit += 60">Weitere {{ Math.min(60, filtered.length - limit) }} anzeigen <ChevronDown :size="15" /></button></div><div class="explorer-bottom"><span class="status-dot"></span> {{ Math.min(limit, filtered.length) }} von {{ number(filtered.length) }} Projekten</div></section>
+<div v-if="selected" class="detail-column">
+<section class="detail-overview panel"><div class="detail-heading"><div class="selected-glyph"><Package v-if="kind === 'apps'" :size="27" /><Boxes v-else :size="27" /></div><div class="detail-title"><div class="eyebrow">PROJEKT IM FOKUS</div><h2>{{ selected.name }}</h2><code>{{ selected.id }}</code></div><button class="icon-button" aria-label="Projektlink kopieren" @click="copy(shareUrl)"><Link2 :size="18" /></button></div><div class="detail-stats"><div><span>Installationen</span><strong>{{ number(selected.total) }}</strong></div><div><span>Gemeldete Versionen</span><strong>{{ number(versions.length) }}</strong></div><div><span>Meistgenutzte Version</span><strong class="version-number">{{ versions[0]?.[0] || '—' }}</strong></div></div></section>
+<div class="chart-grid"><section class="versions-panel panel"><div class="panel-heading"><h2>Versionsverteilung</h2><span class="muted">Aktueller Stand</span></div><div v-if="versions.length" class="versions-content"><div class="donut-wrap"><StatChart :data="versionData" :options="donutOptions" :label="`Versionsverteilung für ${selected.name}. Details stehen in der Tabelle darunter.`" /><div class="donut-center"><strong>{{ versions[0] ? percentage(versions[0][1], versionSum) : '—' }}</strong><span>auf Version {{ versions[0]?.[0] }}</span></div></div><div class="version-legend"><div v-for="(slice, index) in versionSlices" :key="slice.label"><span class="legend-dot" :style="{ background: palette[index] }"></span><span class="legend-name">{{ slice.label }}</span><strong>{{ percentage(slice.value, versionSum) }}</strong></div></div></div><div v-else class="chart-empty">Keine Versionsdaten verfügbar.</div></section>
+<section class="insights-panel panel"><div class="panel-heading"><h2>Auf einen Blick</h2><Sparkles :size="17" /></div><template v-if="kind === 'apps'"><div class="insight"><div><span><Activity :size="15" /> Auto-Update</span><strong>{{ percentage(selected.auto_update || 0, selected.total) }}</strong></div><div class="progress-track"><span :style="{ width: `${Math.min(100, percent(selected.auto_update || 0, selected.total))}%` }"></span></div><small>{{ number(selected.auto_update || 0) }} aktualisieren automatisch</small></div><div class="insight"><div><span><ShieldCheck :size="15" /> Geschützter Modus</span><strong>{{ percentage(selected.protected || 0, selected.total) }}</strong></div><div class="progress-track teal"><span :style="{ width: `${Math.min(100, percent(selected.protected || 0, selected.total))}%` }"></span></div><small>{{ number(selected.protected || 0) }} laufen geschützt</small></div></template><template v-else><div class="insight"><div><span><Layers :size="15" /> Versionsvielfalt</span><strong>{{ versions.length }}</strong></div><p>Verschiedene Versionen wurden für diese Integration gemeldet.</p></div><div class="insight"><div><span><TrendingUp :size="15" /> Verbreitung</span><strong>{{ metadata.activeInstallations ? percentage(selected.total, metadata.activeInstallations) : '—' }}</strong></div><small>der {{ number(metadata.activeInstallations || 0) }} meldenden HA-Installationen</small></div></template><div class="insight-note"><Info :size="14" /><span>{{ kind === 'apps' ? 'Auto-Updates und geschützter Modus sind unabhängig voneinander.' : 'Keine Auto-Update- oder Schutzmodus-Daten für Custom Integrations.' }}</span></div></section></div>
+
+<section class="history-panel panel"><div class="panel-heading"><div><h2>Installationen im Zeitverlauf</h2><p class="panel-subtitle">{{ change ? `${change.absolute >= 0 ? '+' : ''}${number(change.absolute)} seit ${new Date(`${points[0][0]}T12:00:00Z`).toLocaleDateString('de-DE')}` : 'Jeder Datenpunkt erzählt ein Stück Geschichte.' }}</p></div><div class="period-control" aria-label="Zeitraum"><button v-for="period in [30, 90, 365]" :key="period" :class="{ active: days === period }" :aria-pressed="days === period" @click="days = period">{{ period === 365 ? '1 Jahr' : `${period} Tage` }}</button></div></div><div v-if="points.length >= 2" class="history-chart"><StatChart type="line" :data="lineData" :options="lineOptions" :label="`Gemeldete Installationen von ${points[0][0]} bis ${points.at(-1)[0]}. Veränderung ${change.absolute}.`" /></div><div v-else class="history-empty"><div class="history-grid"><span></span><span></span><span></span><span></span></div><div class="history-empty-content"><span class="history-dot"></span><strong>{{ historyUnavailable ? 'Der Verlauf ist gerade nicht verfügbar.' : points.length ? 'Der erste Datenpunkt ist gesetzt.' : 'Hier wächst deine Geschichte.' }}</strong><p>{{ historyUnavailable ? 'Die aktuellen Statistiken bleiben verfügbar. Lade die Seite später erneut.' : 'Wir sammeln täglich neue Werte. Sobald zwei Messpunkte vorliegen, wird der Verlauf sichtbar.' }}</p><span v-if="points.length" class="first-point">{{ points[0][0] }} <b>{{ number(points[0][1]) }} Installationen</b></span></div></div><details v-if="points.length >= 2" class="history-table"><summary>Messwerte als Tabelle anzeigen</summary><div class="table-scroll"><table><thead><tr><th>Datum (UTC)</th><th>Installationen</th></tr></thead><tbody><tr v-for="[date, count] in points" :key="date"><td>{{ date }}</td><td>{{ number(count) }}</td></tr></tbody></table></div></details><div class="chart-footnote"><span class="legend-dot" :style="{ background: palette[1] }"></span> Gemeldete Installationen <span>·</span> tägliche Erfassung · {{ points.length }} {{ points.length === 1 ? 'Messpunkt' : 'Messpunkte' }}</div></section>
+<section class="version-table panel"><div class="panel-heading"><h2>Alle gemeldeten Versionen</h2><span class="count-label">{{ versions.length }}</span></div><details><summary>Versionen & Anteile ansehen <ChevronDown :size="15" /></summary><div class="table-scroll"><table><thead><tr><th>Version</th><th>Installationen</th><th>Anteil an Versionsmeldungen</th></tr></thead><tbody><tr v-for="([version, count], index) in versions" :key="version"><td><span class="legend-dot" :style="{ background: palette[index % palette.length] }"></span><code>{{ version }}</code><span v-if="index === 0" class="tiny-badge">Meistgenutzt</span></td><td>{{ number(count) }}</td><td>{{ percentage(count, versionSum) }}</td></tr></tbody></table></div></details><p v-if="versionSum !== selected.total" class="table-note">Versionsmeldungen ({{ number(versionSum) }}) können von der Gesamtzahl der Installationen abweichen. Anteile beziehen sich auf die Versionsmeldungen.</p></section>
+</div>
+<div v-else class="no-selection panel"><div class="selected-glyph"><Boxes :size="31" /></div><h2>{{ activeProject ? activeProject.name : 'Platz für neue Entdeckungen.' }}</h2><p>{{ activeProject ? 'Dieses Projekt ist vorbereitet. Sobald Home Assistant dafür Analytics-Daten veröffentlicht, erscheinen hier automatisch die Statistiken.' : 'Passe deine Suche an, um ein Projekt und seine Statistiken zu entdecken.' }}</p><a v-if="activeProject" class="button" :href="`https://github.com/seb5594/${activeProject.repo}`" target="_blank" rel="noreferrer"><Github :size="16" /> Zum Repository</a><button v-else class="button" @click="resetFilters">Filter zurücksetzen</button></div>
+</div>
+</template></section></template>
+<template v-else>
+<div class="projects-banner"><div class="banner-symbol"><FolderGit2 :size="29" /></div><div><strong>Gebaut mit Neugier. Geteilt mit der Community.</strong><p>Apps und Integrationen von seb5594 – mit einem direkten Weg zu ihren Zahlen.</p></div><a href="https://github.com/seb5594" target="_blank" rel="noreferrer">GitHub-Profil <ArrowUpRight :size="16" /></a></div>
+<div v-if="loading" class="notice"><LoaderCircle class="spin" :size="16" /> Statistikdaten werden geladen.</div>
+<section v-for="type in ['apps', 'integrations']" :key="type" class="my-projects-section"><div class="section-heading"><h2>{{ type === 'apps' ? 'Apps & Add-ons' : 'Custom Integrations' }}</h2><span>3 Projekte</span></div><div class="my-project-grid"><article v-for="project in projects.filter(p => p.kind === type)" :key="project.id" class="my-project-card panel"><div class="my-project-top"><span class="project-card-icon" :class="project.color"><component :is="icons[project.icon]" :size="23" /></span><a :href="`https://github.com/seb5594/${project.repo}`" :aria-label="`${project.name} auf GitHub`" target="_blank" rel="noreferrer"><ArrowUpRight :size="18" /></a></div><h3>{{ project.name }}</h3><p>{{ project.description }}</p><div class="my-project-metric"><strong>{{ projectEntry(project) ? number(projectEntry(project).total) : '—' }}</strong><span>{{ errors[type] ? 'Daten nicht erreichbar' : projectEntry(project) ? 'gemeldete Installationen' : 'Noch nicht in Analytics gemeldet' }}</span></div><div class="my-project-actions"><button class="text-button" @click="openProject(project)">Statistiken ansehen <ArrowRight :size="15" /></button><button class="icon-button" :aria-label="`Statistiklink für ${project.name} kopieren`" @click="copy(projectLink(project))"><Link2 :size="16" /></button></div><details class="embed-details"><summary><Code2 :size="14" /> README-Badge einbetten</summary><p>Dieser Badge verlinkt direkt auf die Statistik deines Projekts.</p><textarea :value="badgeMarkdown(project)" readonly :aria-label="`README-Badge für ${project.name}`" rows="4"></textarea><button class="button small" @click="copy(badgeMarkdown(project))"><Copy :size="13" /> Markdown kopieren</button></details></article></div></section>
+<div class="notice"><Info :size="16" /><span>Apps werden über den Store-Slug <code>4c7fee11</code> und die bekannten eigenen Vorgänger-Stores zugeordnet. Integrationen über ihre exakte Domain. Fehlende Einträge bedeuten keine nachgewiesenen null Installationen.</span></div>
+</template>
+<div class="method-note"><div class="note-icon"><Info :size="17" /></div><p><strong>Offen und mit Kontext.</strong> Diese Zahlen stammen aus freiwillig geteilten Home-Assistant-Analytics. Sie zeigen einen Teil der Nutzung, nicht alle Installationen. Mehrere Apps können auf derselben HA-Installation laufen.</p><button class="text-button" @click="sourcesDialog.showModal()">Mehr erfahren <ArrowUpRight :size="14" /></button></div>
+<footer><span>HA Observatory <span class="footer-dot">·</span> Made for the Home Assistant community</span><span>Inspiriert von <a href="https://github.com/Poeschl/homeassistant-addon-stats" target="_blank" rel="noreferrer">Poeschl <ArrowUpRight :size="12" /></a><span class="footer-dot">·</span><a :href="`${repository}/blob/main/LICENCE`" target="_blank" rel="noreferrer">Apache 2.0</a></span></footer>
+</main></div>
+<div v-if="toast" class="toast" role="status"><Check :size="16" /> {{ toast }}</div>
+<dialog ref="shareDialog" class="modal" aria-labelledby="share-title" @click="e => { if (e.target === shareDialog) shareDialog.close() }"><div class="modal-heading"><span class="metric-icon blue"><Link2 :size="21" /></span><button class="icon-button" aria-label="Dialog schließen" @click="shareDialog.close()"><X :size="20" /></button></div><h2 id="share-title">Gute Zahlen sind zum Teilen da.</h2><p>Deine Auswahl, Filter und der Zeitraum stecken schon im Link. Perfekt für dein Repository.</p><label class="field-label" for="share-link">Direktlink</label><div class="copy-field"><input id="share-link" :value="shareUrl" readonly /><button class="button primary" aria-label="Direktlink kopieren" @click="copy(shareUrl)"><Copy :size="16" /></button></div><label class="field-label" for="embed-markdown">Markdown für dein README</label><textarea id="embed-markdown" :value="embedMarkdown" readonly rows="3"></textarea><button class="button" @click="copy(embedMarkdown)"><Copy :size="15" /> Markdown kopieren</button><div class="modal-note"><Info :size="15" /> Projekt-Badges findest du unter „Meine Projekte“.</div></dialog>
+<dialog ref="sourcesDialog" class="modal sources-modal" aria-labelledby="sources-title" @click="e => { if (e.target === sourcesDialog) sourcesDialog.close() }"><div class="modal-heading"><span class="metric-icon teal"><Database :size="21" /></span><button class="icon-button" aria-label="Dialog schließen" @click="sourcesDialog.close()"><X :size="20" /></button></div><h2 id="sources-title">Die Geschichte hinter den Zahlen.</h2><p>Nachvollziehbare Quellen. Ehrliche Grenzen. Keine erfundenen Trends.</p><h3>Woher kommen die Daten?</h3><p>Wir übernehmen die öffentlichen, aggregierten Daten von <a href="https://analytics.home-assistant.io/" target="_blank" rel="noreferrer">Home Assistant Analytics</a>. Der tägliche Abruf erstellt einen Snapshot und speichert Installationszahlen für bis zu 365 Tage.</p><div class="source-links"><a href="https://analytics.home-assistant.io/addons.json" target="_blank" rel="noreferrer"><Package :size="16" /> Apps & Add-ons <ExternalLink :size="13" /></a><a href="https://analytics.home-assistant.io/custom_integrations.json" target="_blank" rel="noreferrer"><Boxes :size="16" /> Custom Integrations <ExternalLink :size="13" /></a><a href="https://analytics.home-assistant.io/current_data.json" target="_blank" rel="noreferrer"><Globe2 :size="16" /> HA-Gesamtzahlen <ExternalLink :size="13" /></a></div><h3>Was wird gemessen?</h3><p>Nur Installationen mit aktivierter Datenfreigabe. Summen über Projekte zählen eine HA-Installation gegebenenfalls mehrfach. „Meistgenutzte Version“ ist die häufigste gemeldete Version und keine Aussage zur neuesten verfügbaren Veröffentlichung.</p><h3>Was passiert bei fehlenden Daten?</h3><p>Fehlende Projekte werden als „Noch nicht gemeldet“ angezeigt. Verläufe beginnen mit dem ersten eigenen Snapshot; fehlende Meldungen gelten nicht als null. Versionsanteile basieren auf Versionsmeldungen. Custom Integrations enthalten keine Auto-Update- oder Schutzmodus-Zahlen.</p><h3>Eine Idee, die weiterwächst.</h3><p>Dieses Projekt ist ein überarbeiteter Fork von <a href="https://github.com/Poeschl/homeassistant-addon-stats" target="_blank" rel="noreferrer">Poeschls Home Assistant Addon Stats</a>. Danke an Poeschl für die ursprüngliche Idee und die offene Grundlage.</p><div class="modal-note"><BookOpen :size="16" /> Apache 2.0 · Keine zusätzlichen Besucher-Tracker · Letzter Abruf: {{ dataDate }}</div></dialog>
 </template>

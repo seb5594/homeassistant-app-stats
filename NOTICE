@@ -1,0 +1,11 @@
+HA Observatory / Home Assistant App Stats
+
+This project is a substantially redesigned fork of Home Assistant Addon Stats
+by Poeschl (https://github.com/Poeschl/homeassistant-addon-stats).
+Thank you to Poeschl for the original idea and open-source foundation.
+The original Apache License 2.0 is preserved in LICENCE.
+
+Dashboard redesign and custom integration support by seb5594, 2026.
+Statistics: public, opt-in Home Assistant Analytics (https://analytics.home-assistant.io/).
+DM Sans and Manrope: SIL Open Font License, bundled licenses in src/assets/fonts/.
+Lucide icons: ISC license, supplied by @lucide/vue.

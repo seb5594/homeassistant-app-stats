@@ -1,29 +1,27 @@
 {
-  "name": "homeassistant-addon-stats",
-  "version": "0.1.0",
+  "name": "homeassistant-app-stats",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Beautiful, shareable analytics for Home Assistant apps and custom integrations. Track adoption, explore versions, and give your open-source projects a home in numbers.",
   "type": "module",
+  "packageManager": "npm@12.2.0",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "preview": "vite preview --port 5050",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
+    "preview": "vite preview --host 127.0.0.1 --port 5050",
+    "data": "node scripts/update-data.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
-    "@mdi/font": "^7.4.47",
-    "bootstrap": "^5.3.8",
-    "chartjs-adapter-date-fns": "^3.0.0",
-    "compare-versions": "^6.1.1",
-    "d3-scale-chromatic": "^3.1.0",
-    "date-fns": "^4.1.0",
-    "plausible-tracker": "^0.3.9",
-    "sass": "^1.97.1",
-    "vue": "^3.5.26",
-    "vue-chartjs": "^5.3.3"
+    "chart.js": "^4.5.1",
+    "vue": "^3.5.44",
+    "@lucide/vue": "^1.59.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.2.1",
-    "eslint": "^8.57.1",
-    "eslint-plugin-vue": "^9.32.0",
-    "vite": "^6.2.0"
+    "@vitejs/plugin-vue": "^6.0.10",
+    "vite": "^8.3.4"
   }
 }

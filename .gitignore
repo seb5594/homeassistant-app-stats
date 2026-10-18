@@ -30,3 +30,9 @@ coverage
 # Updated addons json
 public/addons.json
 public/version_history.json
+
+# Generated daily snapshots and badges
+public/data/
+public/badges/
+.cache/
+.data-store/
