@@ -1,54 +1,54 @@
 # HA Observatory
 
-**Home Assistant. In Zahlen.**
+**Home Assistant. In numbers.**
 
-Ein modernes, offenes Dashboard für Home-Assistant-Apps, Add-ons und Custom Integrations. Entdecke gemeldete Installationen, Versionsverteilungen und die Entwicklung deiner Projekte – mit teilbaren Ansichten und README-Badges.
+A modern, open dashboard for Home Assistant apps, add-ons, and custom integrations. Explore reported installations, version distributions, and the growth of your projects with shareable views and README badges.
 
-[Dashboard öffnen](https://seb5594.github.io/homeassistant-app-stats/) · [Meine Projekte](https://seb5594.github.io/homeassistant-app-stats/?view=projects) · [Offizielle Datenquelle](https://analytics.home-assistant.io/)
+[Open dashboard](https://seb5594.github.io/homeassistant-app-stats/) · [My projects](https://seb5594.github.io/homeassistant-app-stats/?view=projects) · [Official data source](https://analytics.home-assistant.io/)
 
-## Neue Repository-Description
+## Repository description
 
 > Beautiful, shareable analytics for Home Assistant apps and custom integrations. Track adoption, explore versions, and give your open-source projects a home in numbers.
 
-## Funktionen
+## Features
 
-- Getrennte, per Tastatur bedienbare Tabs für Apps/Add-ons und Custom Integrations.
-- Suche nach Namen, Slug oder Domain; exakte App-Store-Filter; Sortierung nach Nutzung oder Name.
-- Kontextbezogene Kennzahlen, Versionsverteilungen und vollständige Versionstabellen.
-- Eigene tägliche Installationsverläufe für 30, 90 oder 365 Tage mit tabellarischen Messwerten.
-- Hell-/Dunkelmodus, responsive Oberfläche und reduzierte Animationen bei entsprechender Systemeinstellung.
-- Teilbare Ansichten, CSV-Export, sechs vorbereitete Projektseiten und aktualisierte SVG-Badges.
-- Selbst gehostete Schriftarten; keine zusätzlichen Besucher-Tracker oder externen Schriften-Anfragen.
+- Separate, keyboard-accessible tabs for apps/add-ons and custom integrations.
+- Search by name, slug, or domain; filter by exact app store; sort by usage or name.
+- Contextual metrics, version distributions, and complete version tables.
+- Daily installation history for the past 30, 90, or 365 days, with measurements available in tables.
+- Light and dark modes, a responsive interface, and reduced animations when requested by your system settings.
+- Shareable views, CSV export, six preconfigured project views, and automatically updated SVG badges.
+- Self-hosted fonts, no additional visitor tracking, and no requests to external font services.
 
-## Daten mit Kontext
+## Understanding the data
 
-| Inhalt | Offizielle Quelle |
+| Content | Official source |
 | --- | --- |
-| Apps & Add-ons | https://analytics.home-assistant.io/addons.json |
-| Custom Integrations | https://analytics.home-assistant.io/custom_integrations.json |
-| Meldende HA-Installationen | https://analytics.home-assistant.io/current_data.json |
+| Apps & add-ons | https://analytics.home-assistant.io/addons.json |
+| Custom integrations | https://analytics.home-assistant.io/custom_integrations.json |
+| Reporting Home Assistant installations | https://analytics.home-assistant.io/current_data.json |
 
-Die Teilnahme an Home Assistant Analytics ist freiwillig. Die Zahlen sind keine vollständige Erhebung aller Installationen. Summen über Projekte können dieselbe HA-Installation mehrfach zählen. Eine fehlende Domain oder ein fehlender Slug bedeutet **nicht**, dass ein Projekt keine Nutzer hat.
+Participation in Home Assistant Analytics is voluntary. These figures do not represent every installation. Totals across projects may count the same Home Assistant installation more than once. A missing domain or slug does **not** mean that a project has no users.
 
-Versionsanteile beziehen sich auf die Summe der Versionsmeldungen; diese kann von der Gesamtzahl abweichen. Die meistgenutzte Version muss nicht die neueste veröffentlichte Version sein. Auto-Update und geschützter Modus werden nur für Apps ausgewiesen.
+Version percentages are calculated from the sum of reported version counts, which may differ from the total installation count. The most widely used version is not necessarily the latest release. Automatic updates and protected mode are shown only for apps.
 
-Der eigene Verlauf beginnt mit dem ersten erfolgreichen Abruf. Vorherige Zeiträume werden nicht rekonstruiert oder simuliert. Entfernte Projekte behalten ihre bisherigen Punkte bis zum Ablauf der Aufbewahrung; fehlende Meldungen werden nicht als null interpretiert. Die Seite zeigt die Abrufzeit und eine Warnung nach 48 Stunden ohne Aktualisierung.
+The project's own history starts with the first successful data fetch. Earlier periods are neither reconstructed nor simulated. Projects removed from the current dataset retain their existing history until the retention period expires; missing reports are not treated as zero. The dashboard shows the fetch time and displays a warning after 48 hours without an update.
 
-## GitHub Pages einrichten
+## Setting up GitHub Pages
 
-1. In **Settings → Pages → Build and deployment → Source** die Option **GitHub Actions** auswählen.
-2. In **Actions** die Workflows für diesen Fork aktivieren, falls GitHub sie noch deaktiviert hat.
-3. Den Workflow **Build and deploy Observatory** manuell starten oder Änderungen auf `main` pushen.
+1. Under **Settings → Pages → Build and deployment → Source**, select **GitHub Actions**.
+2. Under **Actions**, enable workflows for this fork if GitHub has disabled them.
+3. Run the **Build and deploy Observatory** workflow manually or push changes to `main`.
 
-Der Workflow testet die Anwendung, lädt und validiert alle drei Quellen, erstellt den Build und veröffentlicht ihn über die offiziellen Pages-Actions. Er läuft außerdem täglich um **04:17 UTC**. Ein fehlgeschlagener Datenabruf ersetzt keine veröffentlichte Seite.
+The workflow tests the application, fetches and validates all three data sources, builds the site, and publishes it using the official Pages actions. It also runs daily at **04:17 UTC**. A failed data fetch does not replace the published site.
 
-Der separate Branch `data` speichert das komprimierte Verlaufsarchiv (`history.json.gz`) mit maximal 365 Tagen. Er enthält keinen Anwendungscode und darf für einen kontinuierlichen Verlauf nicht gelöscht werden. Die Frontend-Dateien enthalten kleine, projektweise Verlaufsdateien, die erst bei Auswahl geladen werden. Der Workflow verwendet `GITHUB_TOKEN`; eigene API-Schlüssel werden nicht benötigt.
+The separate `data` branch stores a compressed history archive (`history.json.gz`) containing up to 365 days of data. It contains no application code and must be preserved to maintain a continuous history. The frontend serves small, per-project history files that are loaded only when a project is selected. The workflow uses `GITHUB_TOKEN`; no personal API keys are required.
 
-GitHub kann tägliche Workflows öffentlicher Repositorys nach längerer Inaktivität deaktivieren. Bei veralteten Zahlen den Workflow-Status prüfen und gegebenenfalls wieder aktivieren.
+GitHub may disable scheduled workflows in public repositories after an extended period of inactivity. If the figures become outdated, check the workflow status and re-enable it if necessary.
 
-## Lokale Entwicklung
+## Local development
 
-Voraussetzung: Node.js 24 LTS und npm.
+Requirements: Node.js 24 LTS and npm.
 
 ```sh
 npm ci
@@ -62,44 +62,44 @@ npm run build
 npm run preview
 ```
 
-`npm run data` legt aktuelle Daten unter `public/data/` und Badges unter `public/badges/` ab. Das lokale Archiv liegt in `.cache/history.json.gz`. Diese Dateien sind generiert und werden nicht auf `main` versioniert. `npm run build` benötigt keinen Netzwerkzugriff; vor einer Veröffentlichung müssen die Statistikdaten einmal erzeugt worden sein.
+`npm run data` writes current statistics to `public/data/` and badges to `public/badges/`. The local history archive is stored in `.cache/history.json.gz`. These files are generated and are not committed to `main`. `npm run build` does not require network access; generate the statistics data at least once before publishing.
 
-Vite verwendet relative Asset-Pfade. Der Build funktioniert sowohl unter `/homeassistant-app-stats/` als auch unter einer eigenen Domain. Navigation und Filter verwenden Query-Parameter, sodass direkte Links ohne zusätzliche Server-Rewrites funktionieren.
+Vite uses relative asset paths, so the build works both under `/homeassistant-app-stats/` and on a custom domain. Navigation and filters use query parameters, allowing direct links to work without additional server rewrites.
 
-## Links und Badges für deine Repositorys
+## Links and badges for your repositories
 
-Alte Filterlinks bleiben kompatibel:
+Existing filter links remain compatible:
 
 ```text
 https://seb5594.github.io/homeassistant-app-stats/?filter=68413af6
 ```
 
-| Parameter | Bedeutung |
+| Parameter | Meaning |
 | --- | --- |
-| `tab=integrations` | Custom Integrations anzeigen (Standard: Apps) |
-| `filter=...` | Name, Slug oder Domain durchsuchen |
-| `store=4c7fee11` | Exakter App-Store |
-| `item=core_mosquitto` | Datensatz auswählen |
-| `project=vacuum_mapguard` | Ein vorbereitetes eigenes Projekt auswählen |
-| `days=30` / `90` / `365` | Verlaufszeitraum |
-| `view=projects` | Eigene Projekte und Badge-Generator |
+| `tab=integrations` | Show custom integrations (default: apps) |
+| `filter=...` | Search by name, slug, or domain |
+| `store=4c7fee11` | Filter by an exact app store |
+| `item=core_mosquitto` | Select a dataset entry |
+| `project=vacuum_mapguard` | Select a preconfigured personal project |
+| `days=30` / `90` / `365` | Set the history period |
+| `view=projects` | Open personal projects and the badge generator |
 
-Vorbereitete Links und Markdown-Snippets stehen in [docs/repository-links.md](docs/repository-links.md). Sie lassen sich auf der Seite unter **Meine Projekte → README-Badge einbetten** kopieren.
+Ready-to-use links and Markdown snippets are available in [docs/repository-links.md](docs/repository-links.md). You can also copy them from the expandable README badge section of each card in the project overview.
 
-Eigene Projekte werden in `src/catalog.js` konfiguriert. Für Apps setzt sich die Analytics-ID aus Store-Hash und App-Slug zusammen. Der Supervisor berechnet den Store-Hash als die ersten acht Zeichen des SHA-1 der kleingeschriebenen Store-URL. Der aktuelle Store `https://github.com/seb5594/Home-Assistant-Apps` ergibt `4c7fee11`; zusätzlich werden die bekannten eigenen Einzel-Repositorys berücksichtigt. Statistiken aus Poeschls Store werden nicht deinen Projekten zugerechnet. Custom Integrations werden über die exakte Domain aus `manifest.json` zugeordnet.
+Personal projects are configured in `src/catalog.js`. For apps, the analytics ID combines the store hash and the app slug. The Supervisor calculates the store hash from the first eight characters of the SHA-1 hash of the lowercase store URL. The current store, `https://github.com/seb5594/Home-Assistant-Apps`, produces `4c7fee11`; known individual repositories previously used as personal stores are also included. Statistics from Poeschl's store are not attributed to your projects. Custom integrations are matched using the exact domain from `manifest.json`.
 
-## Technik und Farbpalette
+## Technology and color palette
 
-Vue 3 mit Composition API, Vite 8 / Rolldown, Chart.js 4 und Lucide. Bootstrap, Sass, Icon-Fonts und der bisherige Tracking-Code wurden entfernt.
+Vue 3 with the Composition API, Vite 8 / Rolldown, Chart.js 4, and Lucide. Bootstrap, Sass, icon fonts, and the previous tracking code have been removed.
 
-Die gemeinsame JavaScript-Farbpalette steht in `src/palette.js`:
+The shared JavaScript color palette is defined in `src/palette.js`:
 
 ```js
 ['#193b69', '#4e87d5', '#55b5ad', '#8c80c7', '#e0af58', '#88b9e5', '#99aaba', '#bbc5d2']
 ```
 
-## Danke, Poeschl
+## Thank you, Poeschl
 
-Die Inspiration und ursprüngliche Grundlage stammen von **[Poeschls Home Assistant Addon Stats](https://github.com/Poeschl/homeassistant-addon-stats)**. Dieser Fork entwickelt die Idee mit einer neuen Oberfläche, Custom Integrations und eigenen Datenpipelines weiter. Danke für die offene Arbeit und den Anstoß zu diesem Projekt.
+The inspiration and original foundation come from **[Poeschl's Home Assistant Addon Stats](https://github.com/Poeschl/homeassistant-addon-stats)**. This fork builds on that idea with a new interface, custom integration support, and its own data pipelines. Thank you for sharing your work and inspiring this project.
 
-Die ursprüngliche **Apache License 2.0** bleibt erhalten. Siehe [LICENCE](LICENCE) und [NOTICE](NOTICE). Home Assistant ist ein Projekt der Open Home Foundation; dieses Dashboard ist ein unabhängiges Community-Projekt.
+The original **Apache License 2.0** is preserved. See [LICENCE](LICENCE) and [NOTICE](NOTICE). Home Assistant is a project of the Open Home Foundation; this dashboard is an independent community project.
