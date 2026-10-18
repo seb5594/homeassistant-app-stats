@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { Activity, ArrowDownToLine, ArrowRight, ArrowUpRight, AudioLines, Bike, BookOpen, Boxes, Camera, Check, ChevronDown, ChevronRight, CircleHelp, Code2, Copy, Database, ExternalLink, FolderGit2, GitBranch, Code2 as Github, Globe2, HardDrive, House, Info, Layers, LayoutDashboard, Link2, LoaderCircle, Map, Menu, Moon, Package, Search, ShieldCheck, Sparkles, Sun, TrendingUp, Users, X } from '@lucide/vue'
+import { Activity, ArrowDownToLine, ArrowRight, ArrowUpRight, AudioLines, Bike, BookOpen, Boxes, Camera, Check, ChevronDown, ChevronRight, CircleHelp, Code2, Copy, Database, ExternalLink, FolderGit2, GitBranch, Code2 as Github, Globe2, HardDrive, House, Info, Layers, LayoutDashboard, Link2, LoaderCircle, Map as MapIcon, Menu, Moon, Package, Search, ShieldCheck, Sparkles, Sun, TrendingUp, Users, X } from '@lucide/vue'
 import StatChart from './components/StatChart.vue'
 import { projects, repository, pageUrl, projectMatches } from './catalog.js'
 import { number, percentage, percent, normalize, filterEntries, sortedVersions, historyPoints, growth, buildLink, csv, dailySeries } from './statistics.js'
@@ -15,7 +15,7 @@ const days = ref([30, 90, 365].includes(Number(params.get('days'))) ? Number(par
 const sort = ref('total'), limit = ref(60), mobileMenu = ref(false), loading = ref(true), toast = ref('')
 const datasets = ref({ apps: [], integrations: [] }), errors = ref({}), history = ref({}), metadata = ref({}), historyUnavailable = ref(false)
 const sourcesDialog = ref(null), shareDialog = ref(null)
-const icons = { git: GitBranch, drive: HardDrive, camera: Camera, bike: Bike, audio: AudioLines, map: Map }
+const icons = { git: GitBranch, drive: HardDrive, camera: Camera, bike: Bike, audio: AudioLines, map: MapIcon }
 let timer, storedTheme = 'light'
 try { storedTheme = localStorage.getItem('observatory-theme') || 'light' } catch { /* optional preference */ }
 const theme = ref(storedTheme)
